@@ -10,7 +10,6 @@ import json
 import os
 import pickle
 import shutil
-import sys
 import time
 import typing
 import warnings
@@ -18,14 +17,11 @@ from copy import deepcopy
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from pprint import pprint
-from typing import Any, Callable, Optional, Type, TypeVar, Union
+from typing import Any, Callable, Optional, Type, TypeVar, Union, Dict, get_origin
 
 import delu
 import numpy as np
-import tomli
-import tomli_w
 import torch
-from loguru import logger
 
 from . import env
 
@@ -37,15 +33,12 @@ def configure_libraries():
     torch.backends.cudnn.benchmark = False  # type: ignore[code]
     torch.backends.cudnn.deterministic = True  # type: ignore[code]
 
-    logger.remove()
-    logger.add(sys.stderr, format='<level>{message}</level>')
-
 
 # ======================================================================================
 # >>> types <<<
 # ======================================================================================
-KWArgs = dict[str, Any]
-JSONDict = dict[str, Any]  # must be JSON-serializable
+KWArgs = Dict[str, Any]
+JSONDict = Dict[str, Any]  # must be JSON-serializable
 T = TypeVar('T')
 
 
@@ -107,29 +100,8 @@ def start(
     print(
         f'[>>>] {env.try_get_relative_path(output)} | {datetime.datetime.now()}'  # noqa: E501
     )
+    return True
 
-    if output.exists():
-        if force:
-            logger.warning('Removing the existing output')
-            time.sleep(1.0)
-            shutil.rmtree(output)
-            output.mkdir()
-            return True
-        elif not continue_:
-            backup_output(output)
-            logger.warning('Already exists!')
-            return False
-        elif output.joinpath('DONE').exists():
-            backup_output(output)
-            logger.info('Already done!\n')
-            return False
-        else:
-            logger.info('Continuing with the existing output')
-            return True
-    else:
-        logger.info('Creating the output')
-        output.mkdir()
-        return True
 
 
 def make_config(Config: Type[T], config: JSONDict) -> T:
@@ -140,7 +112,7 @@ def make_config(Config: Type[T], config: JSONDict) -> T:
     else:
         assert is_dataclass(Config)
 
-        def _from_dict(datacls: type[T], data: dict) -> T:
+        def _from_dict(datacls: Type[T], data: dict) -> T:
             # this is an intentionally restricted parsing which
             # supports only nested (optional) dataclasses,
             # but not unions and collections thereof
@@ -153,7 +125,7 @@ def make_config(Config: Type[T], config: JSONDict) -> T:
                     data[field.name] = _from_dict(field.type, data[field.name])
                 # check if Optional[<dataclass>]
                 elif (
-                    typing.get_origin(field.type) is Union
+                    get_origin(field.type) is Union
                     and len(typing.get_args(field.type)) == 2
                     and typing.get_args(field.type)[1] is type(None)
                     and is_dataclass(typing.get_args(field.type)[0])
@@ -253,32 +225,6 @@ def summarize(report: JSONDict) -> JSONDict:
 
     return summary
 
-
-def run_Function_cli(function: Function, argv: Optional[list[str]] = None) -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument('config', metavar='FILE')
-    parser.add_argument('--force', action='store_true')
-    if 'continue_' in inspect.signature(function).parameters:
-        can_continue_ = True
-        parser.add_argument('--continue', action='store_true', dest='continue_')
-    else:
-        can_continue_ = False
-    args = parser.parse_args(*(() if argv is None else (argv,)))
-
-    # >>> snippet for the internal infrastructure, ignore it
-    snapshot_dir = os.environ.get('SNAPSHOT_PATH')
-    if snapshot_dir and Path(snapshot_dir).joinpath('CHECKPOINTS_RESTORED').exists():
-        assert can_continue_ and args.continue_
-    # <<<
-
-    config_path = env.get_path(args.config)
-    assert config_path.exists()
-    function(
-        load_config(config_path),
-        config_path.with_suffix(''),
-        force=args.force,
-        **({'continue_': args.continue_} if can_continue_ else {}),
-    )
 
 
 _LAST_SNAPSHOT_TIME = None
@@ -384,18 +330,6 @@ def _process_toml_config(data, load) -> JSONDict:
     return do(data)  # type: ignore[code]
 
 
-def load_config(output_or_config_path: Union[str, Path]) -> JSONDict:
-    with open(env.get_path(output_or_config_path).with_suffix('.toml'), 'rb') as f:
-        return _process_toml_config(tomli.load(f), True)
-
-
-def dump_config(config: JSONDict, output_or_config_path: Union[str, Path]) -> None:
-    path = env.get_path(output_or_config_path).with_suffix('.toml')
-    with open(path, 'wb') as f:
-        tomli_w.dump(_process_toml_config(config, False), f)
-    assert config == load_config(path)  # sanity check
-
-
 def load_report(output: Union[str, Path]) -> JSONDict:
     return load_json(env.get_path(output) / 'report.json')
 
@@ -416,13 +350,13 @@ def dump_summary(summary: JSONDict, output: Union[str, Path]) -> None:
     dump_json(summary, env.get_path(output) / 'summary.json')
 
 
-def load_predictions(output: Union[str, Path]) -> dict[str, np.ndarray]:
+def load_predictions(output: Union[str, Path]) -> Dict[str, np.ndarray]:
     x = np.load(env.get_path(output) / 'predictions.npz')
     return {key: x[key] for key in x}
 
 
 def dump_predictions(
-    predictions: dict[str, np.ndarray], output: Union[str, Path]
+    predictions: Dict[str, np.ndarray], output: Union[str, Path]
 ) -> None:
     np.savez(env.get_path(output) / 'predictions.npz', **predictions)
 
@@ -457,11 +391,6 @@ def print_metrics(loss: float, metrics: dict) -> None:
         f' (loss) {loss:.5f}'
     )
 
-
-def log_scores(metrics: dict) -> None:
-    logger.debug(
-        f'[val] {metrics["val"]["score"]:.4f} [test] {metrics["test"]["score"]:.4f}'
-    )
 
 
 def run_timer():
@@ -500,7 +429,7 @@ def is_oom_exception(err: RuntimeError) -> bool:
     )
 
 
-def run_cli(fn: Callable, argv: Optional[list[str]] = None):
+def run_cli(fn: Callable, argv: Optional[typing.List[str]] = None):
     parser = argparse.ArgumentParser()
     for name, arg in inspect.signature(fn).parameters.items():
         origin = typing.get_origin(arg.annotation)

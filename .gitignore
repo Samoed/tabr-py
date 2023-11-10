@@ -168,3 +168,5 @@ exp/**/*.*
 .DS_Store
 .vscode/
 local/
+/.pdm-python
+.idea

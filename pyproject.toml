@@ -1,7 +1,58 @@
-[tool.black]
-skip_string_normalization = true
+[project]
+name = "tabr-py"
+version = "0.0.1"
+description = "Library for TabR"
+authors = [
+    {name = "Roman Solomatin", email = "risolomatin@gmail.com"},
+]
+dependencies = [
+    "torch>=2.1.0",
+    "faiss-gpu>=1.7.2",
+    "tqdm>=4.66.1",
+    "delu>=0.0.23",
+    "scipy>=1.9.3",
+    "scikit-learn>=1.3.2",
+]
+requires-python = ">=3.8,<3.12"
+readme = "README.md"
+license = {text = "MIT"}
 
-[tool.isort]
-profile = "black"
-multi_line_output = 3
-known_first_party = ["lib"]
+
+[project.optional-dependencies]
+lint = [
+    "ruff>=0.1.5",
+    "mypy>=1.6.1",
+]
+test = [
+    "pytest>=7.4.3",
+]
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+[tool.ruff]
+extend-select= [
+    "UP", # pyupgrade
+    "I", # isort
+    "D", # pydocstyle
+    "RUF", # ruff
+]
+fix = true
+target-version = "py38"
+line-length = 120
+
+[tool.mypy]
+python_version = "3.8"
+# --strict
+disallow_any_generics = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+strict_equality = true

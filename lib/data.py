@@ -2,12 +2,12 @@ import enum
 import hashlib
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Generic, Iterable, Optional, TypeVar, Union, cast
+from typing import Any, Generic, Iterable, Optional, TypeVar, Union, cast, Dict, List, Tuple
 
 import numpy as np
 import sklearn.preprocessing
 import torch
-from loguru import logger
+# from loguru import logger
 from torch import Tensor
 
 from . import env, util
@@ -15,7 +15,7 @@ from .metrics import PredictionType
 from .metrics import calculate_metrics as calculate_metrics_
 from .util import Part, TaskType
 
-NumpyDict = dict[str, np.ndarray]
+NumpyDict = Dict[str, np.ndarray]
 
 _SCORE_SHOULD_BE_MAXIMIZED = {
     'accuracy': True,
@@ -56,7 +56,7 @@ def _to_numpy(x: Union[np.ndarray, Tensor]) -> np.ndarray:
 
 @dataclass(frozen=True)
 class Dataset(Generic[T]):
-    data: dict[str, dict[str, T]]  # {type: {part: <data>}}
+    data: Dict[str, Dict[str, T]]  # {type: {part: <data>}}
     task_type: TaskType
     score: str
     y_info: Optional[YInfo]
@@ -136,19 +136,19 @@ class Dataset(Generic[T]):
         return replace(self, data=data, _Y_numpy=None)  # type: ignore[code]
 
     @property
-    def X_num(self) -> Optional[dict[str, T]]:
+    def X_num(self) -> Optional[Dict[str, T]]:
         return self.data.get('X_num')
 
     @property
-    def X_bin(self) -> Optional[dict[str, T]]:
+    def X_bin(self) -> Optional[Dict[str, T]]:
         return self.data.get('X_bin')
 
     @property
-    def X_cat(self) -> Optional[dict[str, T]]:
+    def X_cat(self) -> Optional[Dict[str, T]]:
         return self.data.get('X_cat')
 
     @property
-    def Y(self) -> dict[str, T]:
+    def Y(self) -> Dict[str, T]:
         return self.data['Y']
 
     def merge_num_bin(self) -> 'Dataset[T]':
@@ -211,7 +211,7 @@ class Dataset(Generic[T]):
             else len((np.unique if self._is_numpy() else torch.unique)(self.Y['train']))
         )
 
-    def cat_cardinalities(self) -> list[int]:
+    def cat_cardinalities(self) -> List[int]:
         unique = np.unique if self._is_numpy() else torch.unique
         return (
             []
@@ -221,9 +221,9 @@ class Dataset(Generic[T]):
 
     def calculate_metrics(
         self,
-        predictions: dict[str, Union[np.ndarray, Tensor]],
+        predictions: Dict[str, Union[np.ndarray, Tensor]],
         prediction_type: Union[None, str, PredictionType],
-    ) -> dict[str, Any]:
+    ) -> Dict[str, Any]:
         if self._is_numpy():
             Y_ = cast(NumpyDict, self.Y)
         elif self._Y_numpy is not None:
@@ -304,7 +304,7 @@ def transform_cat(X: NumpyDict, policy: CatPolicy) -> NumpyDict:
         raise ValueError(f'Unknown encoding: {policy}')
 
 
-def transform_y(Y: NumpyDict, policy: YPolicy) -> tuple[NumpyDict, YInfo]:
+def transform_y(Y: NumpyDict, policy: YPolicy) -> Tuple[NumpyDict, YInfo]:
     if policy == YPolicy.STANDARD:
         mean, std = float(Y['train'].mean()), float(Y['train'].std())
         Y = {k: (v - mean) / std for k, v in Y.items()}
@@ -335,7 +335,7 @@ def build_dataset(
         if cache_path.exists():
             cached_args, cached_value = util.load_pickle(cache_path)
             if args == cached_args:
-                logger.info(f"Using cached dataset: {cache_path.name}")
+                # logger.info(f"Using cached dataset: {cache_path.name}")
                 return cached_value
             else:
                 raise RuntimeError(f'Hash collision for {cache_path}')
@@ -343,7 +343,7 @@ def build_dataset(
         args = None
         cache_path = None
 
-    logger.info(f"Building dataset (path: {path})")
+    # logger.info(f"Building dataset (path: {path})")
     if num_policy is not None:
         num_policy = NumPolicy(num_policy)
     if cat_policy is not None:
@@ -382,5 +382,5 @@ def build_dataset(
     return dataset
 
 
-def are_valid_predictions(predictions: dict[str, np.ndarray]) -> bool:
+def are_valid_predictions(predictions: Dict[str, np.ndarray]) -> bool:
     return all(np.isfinite(x).all() for x in predictions.values())

@@ -1,5 +1,5 @@
 import enum
-from typing import Any, Optional, Union, cast
+from typing import Any, Optional, Union, cast, Tuple, Dict
 
 import numpy as np
 import scipy.special
@@ -18,7 +18,7 @@ def _get_labels_and_probs(
     prediction: np.ndarray,
     task_type: TaskType,
     prediction_type: PredictionType,
-) -> tuple[np.ndarray, Optional[np.ndarray]]:
+) -> Tuple[np.ndarray, Optional[np.ndarray]]:
     assert task_type in (TaskType.BINCLASS, TaskType.MULTICLASS)
 
     if prediction_type == PredictionType.LABELS:
@@ -45,7 +45,7 @@ def calculate_metrics(
     task_type: Union[str, TaskType],
     prediction_type: Union[None, str, PredictionType],
     y_std: Optional[float],
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     task_type = TaskType(task_type)
     if prediction_type is not None:
         prediction_type = PredictionType(prediction_type)
@@ -63,7 +63,7 @@ def calculate_metrics(
         assert prediction_type is not None
         labels, probs = _get_labels_and_probs(y_pred, task_type, prediction_type)
         result = cast(
-            dict[str, Any],
+            Dict[str, Any],
             sklearn.metrics.classification_report(y_true, labels, output_dict=True),
         )
         if probs is not None:

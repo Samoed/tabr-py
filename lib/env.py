@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Union
 
-PROJECT_DIR = Path(os.environ['PROJECT_DIR']).absolute().resolve()
+PROJECT_DIR = Path().absolute().resolve()
 CACHE_DIR = PROJECT_DIR / 'cache'
 DATA_DIR = PROJECT_DIR / 'data'
 EXP_DIR = PROJECT_DIR / 'exp'

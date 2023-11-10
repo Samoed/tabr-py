@@ -1,7 +1,7 @@
 import math
 import statistics
 from functools import partial
-from typing import Any, Callable, Optional, Union, cast
+from typing import Any, Callable, Optional, Union, cast, Dict, List, Tuple
 
 import delu
 import torch
@@ -18,7 +18,7 @@ from .util import TaskType, is_oom_exception
 # ======================================================================================
 # When an instance of ModuleSpec is a dict,
 # it must contain the key "type" with a string value
-ModuleSpec = Union[str, dict[str, Any], Callable[..., nn.Module]]
+ModuleSpec = Union[str, Dict[str, Any], Callable[..., nn.Module]]
 
 
 def _initialize_embeddings(weight: Tensor, d: Optional[int]) -> None:
@@ -37,7 +37,7 @@ def make_trainable_vector(d: int) -> Parameter:
 class OneHotEncoder(nn.Module):
     cardinalities: Tensor
 
-    def __init__(self, cardinalities: list[int]) -> None:
+    def __init__(self, cardinalities: List[int]) -> None:
         # cardinalities[i]`` is the number of unique values for the i-th categorical feature.
         super().__init__()
         self.register_buffer('cardinalities', torch.tensor(cardinalities))
@@ -65,7 +65,7 @@ class CLSEmbedding(nn.Module):
 class CatEmbeddings(nn.Module):
     def __init__(
         self,
-        _cardinalities_and_maybe_dimensions: Union[list[int], list[tuple[int, int]]],
+        _cardinalities_and_maybe_dimensions: Union[List[int], List[Tuple[int, int]]],
         d_embedding: Optional[int] = None,
         *,
         stack: bool = False,
@@ -73,7 +73,7 @@ class CatEmbeddings(nn.Module):
         assert _cardinalities_and_maybe_dimensions
         spec = _cardinalities_and_maybe_dimensions
         if not (
-            (isinstance(spec[0], tuple) and d_embedding is None)
+            (isinstance(spec[0], Tuple) and d_embedding is None)
             or (isinstance(spec[0], int) and d_embedding is not None)
         ):
             raise ValueError(
@@ -86,7 +86,7 @@ class CatEmbeddings(nn.Module):
 
         super().__init__()
         spec_ = cast(
-            list[tuple[int, int]],
+            List[Tuple[int, int]],
             spec if d_embedding is None else [(x, d_embedding) for x in spec],
         )
         self._embeddings = nn.ModuleList()
@@ -333,8 +333,8 @@ def default_zero_weight_decay_condition(
 def make_parameter_groups(
     model: nn.Module,
     zero_weight_decay_condition,
-    custom_groups: dict[tuple[str], dict],  # [(fullnames, options), ...]
-) -> list[dict[str, Any]]:
+    custom_groups: Dict[Tuple[str], Dict],  # [(fullnames, options), ...]
+) -> List[Dict[str, Any]]:
     custom_fullnames = set()
     custom_fullnames.update(*custom_groups)
     assert sum(map(len, custom_groups)) == len(
@@ -373,7 +373,7 @@ def make_optimizer(
     type: str,
     *,
     zero_weight_decay_condition=default_zero_weight_decay_condition,
-    custom_parameter_groups: Optional[dict[tuple[str], dict]] = None,
+    custom_parameter_groups: Optional[Dict[Tuple[str], Dict]] = None,
     **optimizer_kwargs,
 ) -> torch.optim.Optimizer:
     if custom_parameter_groups is None:
@@ -410,7 +410,7 @@ def get_loss_fn(task_type: TaskType, **kwargs) -> Callable[..., Tensor]:
 
 def make_random_batches(
     train_size: int, batch_size: int, device: Optional[torch.device] = None
-) -> list[Tensor]:
+) -> List[Tensor]:
     permutation = torch.randperm(train_size, device=device)
     batches = permutation.split(batch_size)
     # Below, we check that we do not face this issue:
@@ -429,7 +429,7 @@ def train_step(
     step_fn: Callable[..., Tensor],
     batch,
     chunk_size: int,
-) -> tuple[Tensor, int]:
+) -> Tuple[Tensor, int]:
     """The standard training step.
 
     Additionally, when the step for the whole batch does not fit into GPU,
@@ -469,6 +469,6 @@ def train_step(
     return cast(Tensor, loss), chunk_size
 
 
-def process_epoch_losses(losses: list[Tensor]) -> tuple[list[float], float]:
+def process_epoch_losses(losses: List[Tensor]) -> Tuple[List[float], float]:
     losses_ = torch.stack(losses).tolist()
     return losses_, statistics.mean(losses_)
