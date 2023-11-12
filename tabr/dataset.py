@@ -14,8 +14,8 @@ from typing import (
 )
 
 import numpy as np
-import scipy.special
-import sklearn.metrics
+import scipy
+import sklearn
 import torch
 from torch import Tensor
 
@@ -152,9 +152,9 @@ def transform_cat(X: NumpyDict, policy: CatPolicy) -> NumpyDict:
     # >>> ordinal encoding (even if encoding == .ONE_HOT)
     unknown_value = np.iinfo("int64").max - 3
     encoder = sklearn.preprocessing.OrdinalEncoder(
-        handle_unknown="use_encoded_value",  # type: ignore[code]
-        unknown_value=unknown_value,  # type: ignore[code]
-        dtype="int64",  # type: ignore[code]
+        handle_unknown="use_encoded_value",
+        unknown_value=unknown_value,
+        dtype="int64",
     )
     encoder.fit(X["train"])
     X = {k: encoder.transform(v) for k, v in X.items()}
@@ -172,7 +172,7 @@ def transform_cat(X: NumpyDict, policy: CatPolicy) -> NumpyDict:
         encoder = sklearn.preprocessing.OneHotEncoder(
             handle_unknown="ignore",
             sparse_output=False,
-            dtype=np.float32,  # type: ignore[code]
+            dtype=np.float32,
         )
         encoder.fit(X["train"])
         return {k: cast(np.ndarray, encoder.transform(v)) for k, v in X.items()}
@@ -196,12 +196,12 @@ def transform_num(X: NumpyDict, policy: NumPolicy, seed: Optional[int] = 42) -> 
         # Noise is added to get a bit nicer transformation
         # for features with few unique values.
         stds = np.std(X_train, axis=0, keepdims=True)
-        noise_std = noise / np.maximum(stds, noise)  # type: ignore[code]
+        noise_std = noise / np.maximum(stds, noise)
         X_train = X_train + noise_std * np.random.default_rng(seed).standard_normal(X_train.shape)
     else:
         raise ValueError("Unknown normalization: " + policy)
     normalizer.fit(X_train)
-    return {k: normalizer.transform(v) for k, v in X.items()}  # type: ignore[code]
+    return {k: normalizer.transform(v) for k, v in X.items()}
 
 
 # TODO inherit from torch.Dataset
@@ -213,7 +213,7 @@ class Dataset:
     _Y_numpy: Optional[NumpyDict]  # this is used in calculate_metrics
     estimators: Dict[str, Dict[str, Any]]
 
-    def check_array(self):
+    def check_array(self) -> None:
         for key in ["X_num", "X_bin"]:
             if key in self.data:
                 # TODO make error with description
@@ -230,7 +230,7 @@ class Dataset:
 
     def to_torch(self, device=None) -> "Dataset":
         if self._is_torch():
-            return self  # type: ignore[code]
+            return self
         self.data = {
             key: {part: torch.as_tensor(value).to(device) for part, value in self.data[key].items()}
             for key in self.data
@@ -240,9 +240,11 @@ class Dataset:
 
     def to_numpy(self) -> "Dataset[np.ndarray]":
         if self._is_numpy():
-            return self  # type: ignore[code]
+            return self
         data = {key: {part: value.cpu().numpy() for part, value in self.data[key].items()} for key in self.data}
-        return replace(self, data=data, _Y_numpy=None)  # type: ignore[code]
+        self.data = data
+        self._Y_numpy = None
+        return self
 
     @property
     def X_num(self) -> Optional[Dict[str, T]]:

@@ -111,14 +111,14 @@ class Model(nn.Module):
         self.candidate_encoding_batch_size = candidate_encoding_batch_size
         self.reset_parameters()
 
-    def reset_parameters(self):
+    def reset_parameters(self) -> None:
         if isinstance(self.label_encoder, nn.Linear):
             bound = 1 / math.sqrt(2.0)
-            nn.init.uniform_(self.label_encoder.weight, -bound, bound)  # type: ignore[code]
-            nn.init.uniform_(self.label_encoder.bias, -bound, bound)  # type: ignore[code]
+            nn.init.uniform_(self.label_encoder.weight, -bound, bound)
+            nn.init.uniform_(self.label_encoder.bias, -bound, bound)
         else:
             assert isinstance(self.label_encoder[0], nn.Embedding)
-            nn.init.uniform_(self.label_encoder[0].weight, -1.0, 1.0)  # type: ignore[code]
+            nn.init.uniform_(self.label_encoder[0].weight, -1.0, 1.0)
 
     def _encode(self, x_: Dict[str, Tensor]) -> Tuple[Tensor, Tensor]:
         x_num = x_.get("num")
@@ -210,13 +210,11 @@ class Model(nn.Module):
                 )
             # Updating the index is much faster than creating a new one.
             self.search_index.reset()
-            self.search_index.add(candidate_k)  # type: ignore[code]
+            self.search_index.add(candidate_k)
             distances: Tensor
             context_idx: Tensor
 
-            distances, context_idx = self.search_index.search(  # type: ignore[code]
-                k, context_size + (1 if is_train else 0)
-            )
+            distances, context_idx = self.search_index.search(k, context_size + (1 if is_train else 0))
             if is_train:
                 # NOTE: to avoid leakage, the index i must be removed from the i-th row,
                 # (because of how candidate_k is constructed).

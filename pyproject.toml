@@ -22,6 +22,7 @@ license = {text = "MIT"}
 lint = [
     "ruff>=0.1.5",
     "mypy>=1.6.1",
+    "types-tqdm>=4.66.0.4",
 ]
 test = [
     "pytest>=7.4.3",
@@ -49,3 +50,11 @@ line-length = 120
 python_version = "3.8"
 strict = true
 warn_redundant_casts = true
+plugins = ["numpy.typing.mypy_plugin"]
+
+[[tool.mypy.overrides]]
+module = [
+    "scipy",
+    "sklearn",
+]
+ignore_missing_imports = true

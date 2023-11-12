@@ -78,7 +78,7 @@ def test_tabr():
 
     model.to(device)
     if torch.cuda.device_count() > 1:
-        model = nn.DataParallel(model)  # type: ignore[code]
+        model = nn.DataParallel(model)
 
     # >>> training
     # type = "AdamW"
@@ -205,7 +205,7 @@ def test_tabr():
         # UPDATE: after thousands of experiments, we faced the issue zero times,
         # so maybe we should remove the assert.
         assert torch.equal(torch.arange(train_size, device=device), permutation.sort().values)
-        return batches  # type: ignore[code]
+        return batches
 
     def train_step(
         optimizer: Optimizer,
