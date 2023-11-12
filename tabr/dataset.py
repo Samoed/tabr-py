@@ -497,3 +497,10 @@ class Dataset:
 
     def are_valid_predictions(self, predictions: Dict[str, np.ndarray]) -> bool:
         return all(np.isfinite(x).all() for x in predictions.values())
+
+    def get_Xy(self, part: str, idx) -> Tuple[Dict[str, Tensor], Tensor]:
+        batch = (
+            {key[2:]: self.data[key][part] for key in self.data if key.startswith("X_")},
+            self.Y[part],
+        )
+        return batch if idx is None else ({k: v[idx] for k, v in batch[0].items()}, batch[1][idx])

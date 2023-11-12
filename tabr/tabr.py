@@ -1,23 +1,28 @@
 import math
-from typing import Dict, List, Literal, Optional, Tuple, Union
+import statistics
+from typing import Callable, Dict, List, Literal, Optional, Tuple, Union, cast
 
 import delu
 import faiss
 import faiss.contrib.torch_utils  # << this line makes faiss work with PyTorch
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
+from torch.optim import Optimizer
+from tqdm import tqdm
 
-from tabr.dataset import PredictionType
-from tabr.lib import ModuleSpec, OneHotEncoder, make_module
+from tabr.dataset import Dataset, PredictionType
+from tabr.schemes import ModuleSpec
+from tabr.utils import OneHotEncoder, make_module
 
 
 def get_d_out(n_classes: Optional[int]) -> int:
     return 1 if n_classes is None or n_classes == 2 else n_classes
 
 
-class Model(nn.Module):
+class TabR(nn.Module):
     def __init__(
         self,
         n_num_features: int,
@@ -85,7 +90,7 @@ class Model(nn.Module):
             if n_classes is None
             else nn.Sequential(
                 nn.Embedding(n_classes, d_main),
-                delu.nn.Lambda(lambda x: x.squeeze(-2)),  # TODO remove delu
+                delu.nn.Lambda(lambda x: x.squeeze(-2)),
             )
         )
         self.K = nn.Linear(d_main, d_main)
@@ -254,3 +259,215 @@ class Model(nn.Module):
             x = x + block(x)
         x = self.head(x)
         return x
+
+    def apply_model(self, dataset, part: str, idx: Tensor, training: bool, train_indices, context_size: int = 96):
+        x, y = dataset.get_Xy(part, idx)
+
+        candidate_indices = train_indices
+        is_train = part == "train"
+        if is_train:
+            # NOTE: here, the training batch is removed from the candidates.
+            # It will be added back inside the model's forward pass.
+            candidate_indices = candidate_indices[~torch.isin(candidate_indices, idx)]
+        candidate_x, candidate_y = dataset.get_Xy(
+            "train",
+            # This condition is here for historical reasons, it could be just
+            # the unconditional `candidate_indices`.
+            None if candidate_indices is (train_indices) else candidate_indices,
+        )
+
+        return self(
+            x_=x,
+            y=y if is_train else None,
+            candidate_x_=candidate_x,
+            candidate_y=candidate_y,
+            context_size=context_size,
+            is_train=is_train,
+        ).squeeze(-1)
+
+    def is_oom_exception(self, err: RuntimeError) -> bool:
+        return isinstance(err, torch.cuda.OutOfMemoryError) or any(
+            x in str(err)
+            for x in [
+                "CUDA out of memory",
+                "CUBLAS_STATUS_ALLOC_FAILED",
+                "CUDA error: out of memory",
+            ]
+        )
+
+    def are_valid_predictions(self, predictions: Dict[str, np.ndarray]) -> bool:
+        return all(np.isfinite(x).all() for x in predictions.values())
+
+    @torch.inference_mode()
+    def evaluate(self, dataset, parts: List[str], eval_batch_size: int, train_indices, device):
+        self.eval()
+        predictions = {}
+        for part in parts:
+            while eval_batch_size:
+                try:
+                    predictions[part] = (
+                        torch.cat(
+                            [
+                                self.apply_model(dataset, part, idx, False, train_indices)
+                                for idx in torch.arange(dataset.size(part), device=device).split(eval_batch_size)
+                            ]
+                        )
+                        .cpu()
+                        .numpy()
+                    )
+                except RuntimeError as err:
+                    if not self.is_oom_exception(err):
+                        raise
+                    eval_batch_size //= 2
+                    # logger.warning(f"eval_batch_size = {eval_batch_size}")
+                else:
+                    break
+            if not eval_batch_size:
+                RuntimeError("Not enough memory even for eval_batch_size=1")
+        metrics = (
+            dataset.calculate_metrics(predictions, self.prediction_type)
+            if self.are_valid_predictions(predictions)
+            else {x: {"score": -999999.0} for x in predictions}
+        )
+        return metrics, predictions, eval_batch_size
+
+    def save_checkpoint(self, epoch: int, optimizer: Optimizer, training_log, output="path"):
+        torch.save(
+            {
+                "epoch": epoch,
+                "model": self.state_dict(),
+                "optimizer": optimizer.state_dict(),
+                "training_log": training_log,
+            },
+            output,
+        )
+
+    def make_random_batches(
+        self, train_size: int, batch_size: int, device: Optional[torch.device] = None
+    ) -> List[Tensor]:
+        permutation = torch.randperm(train_size, device=device)
+        batches = permutation.split(batch_size)
+        # Below, we check that we do not face this issue:
+        # https://github.com/pytorch/vision/issues/3816
+        # This is still noticeably faster than running randperm on CPU.
+        # UPDATE: after thousands of experiments, we faced the issue zero times,
+        # so maybe we should remove the assert.
+        assert torch.equal(torch.arange(train_size, device=device), permutation.sort().values)
+        return batches
+
+    def train_step(
+        self,
+        optimizer: Optimizer,
+        step_fn: Callable[..., Tensor],
+        batch,
+        chunk_size: int,
+    ) -> Tuple[Tensor, int]:
+        """The standard training step.
+
+        Additionally, when the step for the whole batch does not fit into GPU,
+        this function automatically splits the batch into chunks (virtual batches).
+        Note that this does not affect the algorithm.
+        """
+        batch_size = len(batch)
+        random_state = delu.random.get_state()
+        loss = None
+        while chunk_size != 0:
+            try:
+                delu.random.set_state(random_state)
+                optimizer.zero_grad()
+                if batch_size <= chunk_size:
+                    loss = step_fn(batch)
+                    loss.backward()
+                else:
+                    loss = None
+                    for chunk in delu.iter_batches(batch, chunk_size):
+                        chunk_loss = step_fn(chunk)
+                        chunk_loss = chunk_loss * (len(chunk) / batch_size)
+                        chunk_loss.backward()
+                        if loss is None:
+                            loss = chunk_loss.detach()
+                        else:
+                            loss += chunk_loss.detach()
+            except RuntimeError as err:
+                if not self.is_oom_exception(err):
+                    raise
+                delu.hardware.free_memory()
+                chunk_size //= 2
+            else:
+                break
+        if not chunk_size:
+            raise RuntimeError("Not enough memory even for batch_size=1")
+        optimizer.step()
+        return cast(Tensor, loss), chunk_size
+
+    def process_epoch_losses(self, losses: List[Tensor]) -> Tuple[List[float], float]:
+        losses_ = torch.stack(losses).tolist()
+        return losses_, statistics.mean(losses_)
+
+    def fit(
+        self,
+        dataset: Dataset,
+        n_epochs: int,
+        batch_size: int,
+        device,
+        optimizer,
+        loss_fn,
+        eval_batch_size,
+        chunk_size: Optional[int] = None,
+    ):
+        if dataset.is_regression:
+            dataset.data["Y"] = {k: v.float() for k, v in dataset.Y.items()}
+        Y_train = dataset.Y["train"].to(torch.long if dataset.is_multiclass else torch.float)
+
+        train_size = dataset.size("train")
+        train_indices = torch.arange(train_size, device=device)
+
+        training_log = []
+        for epoch in range(n_epochs):
+            self.train()
+            epoch_losses = []
+            for batch_idx in tqdm(
+                self.make_random_batches(train_size, batch_size, device),
+                desc=f"Epoch {epoch}",
+            ):
+                loss, new_chunk_size = self.train_step(
+                    optimizer,
+                    lambda idx: loss_fn(self.apply_model(dataset, "train", idx, True, train_indices), Y_train[idx]),
+                    batch_idx,
+                    chunk_size or batch_size,
+                )
+                epoch_losses.append(loss.detach())
+                if new_chunk_size and new_chunk_size < (chunk_size or batch_size):
+                    chunk_size = new_chunk_size
+                    # logger.warning(f"chunk_size = {chunk_size}")
+
+            epoch_losses, mean_loss = self.process_epoch_losses(epoch_losses)
+            metrics, predictions, eval_batch_size = self.evaluate(
+                dataset, ["test"], eval_batch_size, train_indices, device
+            )  # TODO change eval to test only
+            # lib.print_metrics(mean_loss, metrics)
+            training_log.append({"epoch-losses": epoch_losses, "metrics": metrics})
+
+            # progress.update(metrics["val"]["score"])
+            # if progress.success:
+            #     # lib.celebrate()
+            #     report["best_epoch"] = epoch
+            #     report["metrics"] = metrics
+            #     save_checkpoint()
+
+            # elif progress.fail or not lib.are_valid_predictions(predictions):
+            #     break
+
+            epoch += 1
+
+
+class TabRClassification(TabR):
+    pass
+    # F.binary_cross_entropy_with_logits
+    # if task_type == TaskType.BINCLASS
+    # else F.cross_entropy
+
+
+class TabRRegression(TabR):
+    pass
+    # F.mse_loss
