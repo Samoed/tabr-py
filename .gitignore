@@ -170,3 +170,5 @@ exp/**/*.*
 local/
 /.pdm-python
 .idea
+/.ruff_cache/
+/.pdm-build/

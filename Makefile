@@ -1,15 +1,13 @@
 .DEFAULT_GOAL := all
 FOLDERS := tabr
 
-.PHONY: lint
-lint:
-	ruff check $(FOLDERS)
-	mypy $(FOLDERS)
-
 .PHONY: format
-format: lint
-	ruff fix $(FOLDERS)
+format:
+	pre-commit run --all-files
 
+.PHONY: test
+test:
+	pytest
 
 .PHONY: all
 all: format
