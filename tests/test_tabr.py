@@ -14,8 +14,6 @@ import torch
 import torch.nn.functional as F
 from torch import nn, Tensor
 
-from tabr.lib import default_zero_weight_decay_condition
-
 
 def test_tabr():
     X = np.array(
@@ -85,20 +83,6 @@ def test_tabr():
         model = nn.DataParallel(model)  # type: ignore[code]
 
     # >>> training
-    def zero_wd_condition(
-            module_name: str,
-            module: nn.Module,
-            parameter_name: str,
-            parameter: nn.parameter.Parameter,
-    ):
-        return (
-                "label_encoder" in module_name
-                or "label_encoder" in parameter_name
-                or default_zero_weight_decay_condition(
-            module_name, module, parameter_name, parameter
-        )
-        )
-
     # type = "AdamW"
     # lr = ["_tune_", "loguniform", 3e-05, 0.001]
     # weight_decay = ["_tune_", "?loguniform", 0.0, 1e-06, 0.0001]
@@ -219,7 +203,6 @@ def test_tabr():
                 "epoch": epoch,
                 "model": model.state_dict(),
                 "optimizer": optimizer.state_dict(),
-                "random_state": delu.random.get_state(),  # TODO remove delu
                 "training_log": training_log,
             },
             output,

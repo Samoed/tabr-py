@@ -236,6 +236,7 @@ class Model(nn.Module):
             self.search_index.add(candidate_k)  # type: ignore[code]
             distances: Tensor
             context_idx: Tensor
+
             distances, context_idx = self.search_index.search(  # type: ignore[code]
                 k, context_size + (1 if is_train else 0)
             )
