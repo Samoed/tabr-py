@@ -11,14 +11,22 @@ repos:
 -   repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.1.4
     hooks:
-    - id: ruff
-      args: [--fix, --exit-non-zero-on-fix]
-      types_or: [python]
-    - id: ruff-format
+    -   id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        types_or: [python]
+    -   id: ruff-format
 
-#-   repo: https://github.com/pre-commit/mirrors-mypy
-#    rev: v1.7.0
-#    hooks:
-#    -   id: mypy
-#        args:
-#            - "--config-file=pyproject.toml"
+-   repo: https://github.com/codespell-project/codespell
+    rev: v2.2.4
+    hooks:
+    -   id: codespell
+
+-   repo: local
+    hooks:
+    -   id: mypy
+        name: Mypy
+        language: python
+        entry: pdm run mypy
+        types: [python]
+        additional_dependencies: ["mypy>=1.7"]
+        require_serial: true
