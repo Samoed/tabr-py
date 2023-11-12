@@ -1,10 +1,10 @@
 import enum
 from dataclasses import dataclass
-from typing import Dict, Any, Union, Callable, Optional, List
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import torch
 import torch.nn.functional as F
-from torch import nn, Tensor
+from torch import Tensor, nn
 from torch.optim import Optimizer
 
 from tabr.dataset import Dataset
@@ -20,6 +20,7 @@ class Part(enum.Enum):
     TRAIN = "train"
     VAL = "val"
     TEST = "test"
+
 
 KWArgs = Dict[str, Any]
 JSONDict = Dict[str, Any]
@@ -54,9 +55,9 @@ class OneHotEncoder(nn.Module):
 
         return torch.cat(encoded_columns, -1)
 
+
 def make_module(spec: ModuleSpec, *args, **kwargs) -> nn.Module:
-    """
-    >>> make_module('ReLU')
+    """>>> make_module('ReLU')
     >>> make_module(nn.ReLU)
     >>> make_module('Linear', 1, out_features=2)
     >>> make_module((lambda *args: nn.Linear(*args)), 1, out_features=2)

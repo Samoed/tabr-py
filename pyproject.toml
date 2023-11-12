@@ -36,9 +36,8 @@ extend-select= [
     "W",   # pycodestyle warnings
     "F",   # pyflakes
     "I",   # isort
-    "C",   # flake8-comprehensions
     "B",   # flake8-bugbear
-    "D",   # pydocstyle
+#    "D",   # pydocstyle
     "UP",  # pyupgrade
     "RUF", # ruff
 ]

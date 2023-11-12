@@ -3,12 +3,15 @@ import logging
 from dataclasses import dataclass, replace
 from typing import (
     Any,
+    Dict,
+    Iterable,
+    List,
     Optional,
-    Union,
+    Tuple,
     TypeVar,
-    Iterable, Dict, Tuple, List,
+    Union,
+    cast,
 )
-from typing import cast
 
 import numpy as np
 import scipy.special
@@ -108,7 +111,6 @@ def calculate_metrics_(
     task_type: Union[str, TaskType],
     prediction_type: Union[None, str, PredictionType],
     y_std: Optional[float],
-
 ) -> Dict[str, Any]:
     task_type = TaskType(task_type)
     if prediction_type is not None:
@@ -168,7 +170,9 @@ def transform_cat(X: NumpyDict, policy: CatPolicy) -> NumpyDict:
         return X
     elif policy == CatPolicy.ONE_HOT:
         encoder = sklearn.preprocessing.OneHotEncoder(
-            handle_unknown="ignore", sparse_output=False, dtype=np.float32  # type: ignore[code]
+            handle_unknown="ignore",
+            sparse_output=False,
+            dtype=np.float32,  # type: ignore[code]
         )
         encoder.fit(X["train"])
         return {k: cast(np.ndarray, encoder.transform(v)) for k, v in X.items()}
@@ -351,7 +355,7 @@ class Dataset:
                     continue
                 unique_values = np.unique(col)
                 res = all(
-                    [np.char.isnumeric(val) or isinstance(val, float) or isinstance(val, int) for val in unique_values]
+                    np.char.isnumeric(val) or isinstance(val, float) or isinstance(val, int) for val in unique_values
                 )
                 if res:
                     num_features.append(i)

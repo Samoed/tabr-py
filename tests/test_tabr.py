@@ -1,18 +1,18 @@
-from typing import Optional, List, Callable, cast, Tuple, Dict
+import statistics
+from functools import partial
+from typing import Callable, Dict, List, Optional, Tuple, cast
 
 import delu
-from sklearn.model_selection import train_test_split
-from torch.optim import Optimizer
-
-from tabr import Model
 import numpy as np
-from tqdm import tqdm
-from tabr.dataset import CatPolicy, NumPolicy, Dataset, TaskType
-from functools import partial
-import statistics
 import torch
 import torch.nn.functional as F
-from torch import nn, Tensor
+from sklearn.model_selection import train_test_split
+from torch import Tensor, nn
+from torch.optim import Optimizer
+from tqdm import tqdm
+
+from tabr import Model
+from tabr.dataset import CatPolicy, Dataset, NumPolicy, TaskType
 
 
 def test_tabr():
@@ -48,9 +48,7 @@ def test_tabr():
         ]
     )
     y = np.array([0, 1, 0, 1, 0, 1, 0, 1])
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, random_state=42, shuffle=False
-    )
+    X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=42, shuffle=False)
     data = Dataset.from_numpy(
         X_train,
         y_train,
@@ -111,18 +109,10 @@ def test_tabr():
 
     def get_Xy(part: str, idx) -> Tuple[Dict[str, Tensor], Tensor]:
         batch = (
-            {
-                key[2:]: dataset.data[key][part]
-                for key in dataset.data
-                if key.startswith("X_")
-            },
+            {key[2:]: dataset.data[key][part] for key in dataset.data if key.startswith("X_")},
             dataset.Y[part],
         )
-        return (
-            batch
-            if idx is None
-            else ({k: v[idx] for k, v in batch[0].items()}, batch[1][idx])
-        )
+        return batch if idx is None else ({k: v[idx] for k, v in batch[0].items()}, batch[1][idx])
 
     def apply_model(part: str, idx: Tensor, training: bool, context_size: int = 96):
         x, y = get_Xy(part, idx)
@@ -173,9 +163,7 @@ def test_tabr():
                         torch.cat(
                             [
                                 apply_model(part, idx, False)
-                                for idx in torch.arange(
-                                dataset.size(part), device=device
-                            ).split(eval_batch_size)
+                                for idx in torch.arange(dataset.size(part), device=device).split(eval_batch_size)
                             ]
                         )
                         .cpu()
@@ -208,9 +196,7 @@ def test_tabr():
             output,
         )
 
-    def make_random_batches(
-            train_size: int, batch_size: int, device: Optional[torch.device] = None
-    ) -> List[Tensor]:
+    def make_random_batches(train_size: int, batch_size: int, device: Optional[torch.device] = None) -> List[Tensor]:
         permutation = torch.randperm(train_size, device=device)
         batches = permutation.split(batch_size)
         # Below, we check that we do not face this issue:
@@ -218,16 +204,14 @@ def test_tabr():
         # This is still noticeably faster than running randperm on CPU.
         # UPDATE: after thousands of experiments, we faced the issue zero times,
         # so maybe we should remove the assert.
-        assert torch.equal(
-            torch.arange(train_size, device=device), permutation.sort().values
-        )
+        assert torch.equal(torch.arange(train_size, device=device), permutation.sort().values)
         return batches  # type: ignore[code]
 
     def train_step(
-            optimizer: Optimizer,
-            step_fn: Callable[..., Tensor],
-            batch,
-            chunk_size: int,
+        optimizer: Optimizer,
+        step_fn: Callable[..., Tensor],
+        batch,
+        chunk_size: int,
     ) -> Tuple[Tensor, int]:
         """The standard training step.
 
@@ -275,8 +259,8 @@ def test_tabr():
         model.train()
         epoch_losses = []
         for batch_idx in tqdm(
-                make_random_batches(train_size, batch_size, device),
-                desc=f"Epoch {epoch}",
+            make_random_batches(train_size, batch_size, device),
+            desc=f"Epoch {epoch}",
         ):
             loss, new_chunk_size = train_step(
                 optimizer,
@@ -290,9 +274,7 @@ def test_tabr():
                 # logger.warning(f"chunk_size = {chunk_size}")
 
         epoch_losses, mean_loss = process_epoch_losses(epoch_losses)
-        metrics, predictions, eval_batch_size = evaluate(
-            ["test"], eval_batch_size
-        )  # TODO change eval to test only
+        metrics, predictions, eval_batch_size = evaluate(["test"], eval_batch_size)  # TODO change eval to test only
         # lib.print_metrics(mean_loss, metrics)
         training_log.append({"epoch-losses": epoch_losses, "metrics": metrics})
 
