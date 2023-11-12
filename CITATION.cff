@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: If you use this software, please cite it as below.
+title: "TabR"
+url: https://github.com/yandex-research/tabular-dl-tabr
+
+preferred-citation:
+  type: article
+  title: "TabR: Unlocking the Power of Retrieval-Augmented Tabular Deep Learning"
+  authors:
+    - family-names: Yury
+      given-names: Gorishniy
+    - family-names: Rubachev
+      given-names: Ivan
+    - family-names: Kartashev
+      given-names: Nikolay
+    - family-names: Shlenskii
+      given-names: Daniil
+    - family-names: Kotelnikov
+      given-names: Akim
+    - family-names: Babenko
+      given-names: Artem
+  journal: "arXiv"
+  volume: 2307.14338
+  year: 2023
