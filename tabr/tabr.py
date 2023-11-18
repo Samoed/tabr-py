@@ -415,6 +415,7 @@ class TabR(nn.Module):
         eval_batch_size,
         chunk_size: Optional[int] = None,
     ):
+        # TODO add verbose
         if dataset.is_regression:
             dataset.data["Y"] = {k: v.float() for k, v in dataset.Y.items()}
         Y_train = dataset.Y["train"].to(torch.long if dataset.is_multiclass else torch.float)
